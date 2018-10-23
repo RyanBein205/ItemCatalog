@@ -15,9 +15,10 @@ from flask import make_response
 import requests
 app = Flask(__name__)
 
-CLIENT_ID = json.loads(open('client_secrets.json', 'r').read())['web']
-['client_id']
+CLIENT_ID = json.loads(open('client_secrets.json', 'r')
+    .read())['web']['client_id']
 APPLICATION_NAME = "Web client 2"
+
 
 
 # Connect to Database Create database session.
@@ -90,6 +91,8 @@ def gconnect():
         response = make_response(
             json.dumps("Token's client ID does not match app's."), 401)
         print "Token's client ID does not match app's."
+        print result['issued_to']
+        print CLIENT_ID
         response.headers['Content-Type'] = 'application/json'
         return response
     stored_access_token = login_session.get('access_token')
@@ -109,7 +112,12 @@ def gconnect():
     params = {'access_token': credentials.access_token, 'alt': 'json'}
     answer = requests.get(userinfo_url, params=params)
     data = answer.json()
-    login_session['username'] = data['name']
+    print data
+    #Check if user has "username", if no username insert email instead.
+    try:
+        login_session['username'] = data['name']
+    except KeyError:
+        login_session['username'] = data['email']
     login_session['picture'] = data['picture']
     login_session['email'] = data['email']
     login_session['id'] = data['id']
@@ -206,8 +214,8 @@ def categoryItemJSON(category_id):
 
 @app.route('/category/<int:category_id>/items/<int:item_id>/JSON')
 def ItemJSON(category_id, item_id):
-    Item = session.query(Item).filter_by(id=item_id).one()
-    return jsonify(Item=Item.serialize)
+    item = session.query(Item).filter_by(id=item_id).one()
+    return jsonify(Item=item.serialize)
 
 
 @app.route('/category/JSON')
@@ -233,6 +241,8 @@ def newCategory():
         newCategory = Category(
             name=request.form['name'], user_id=login_session['id'])
         session.add(newCategory)
+        print newCategory.user_id
+        print login_session['id']
         flash('New Category %s Successfully Created' % newCategory.name)
         session.commit()
         return redirect(url_for('showCategories'))
@@ -262,7 +272,16 @@ def editCategory(category_id):
 def deleteCategory(category_id):
     if 'username' not in login_session:
         return redirect('/login')
-    categoryToDelete = session.query(Category).filter_by(id=category_id).one()
+    loginID = login_session['id']
+    userToCheck = session.query(Category).filter_by(user_id=loginID).first()
+    print userToCheck.user_id
+    categoryToDelete = session.query(Category).filter_by(id=category_id).first()
+    print int(categoryToDelete.user_id)
+    print login_session['id']
+    if int(categoryToDelete.user_id) != int(login_session['id']):
+        return "<script>function myFunction() {alert('You\
+         are not authorized to delete this item.\
+         ');}</script><body onload='myFunction()'>"
     if request.method == 'POST':
         session.delete(categoryToDelete)
         flash('%s Successfully Deleted' % categoryToDelete.name)
